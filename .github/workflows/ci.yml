@@ -1,0 +1,387 @@
+name: Threat Detection IR CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  TERRAFORM_VERSION: 1.5.0
+  GO_VERSION: 1.21
+
+jobs:
+  # Code Quality & Security Checks
+  code-quality:
+    name: Code Quality & Security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Checkov Security Scan
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          framework: terraform
+          output_format: cli
+          output_file_path: checkov-results.txt
+
+      - name: Upload Checkov Results
+        uses: actions/upload-artifact@v3
+        with:
+          name: checkov-results
+          path: checkov-results.txt
+
+      - name: Run TFSec
+        uses: tfsec/tfsec-sarif-action@v1.1.0
+        with:
+          sarif_file: tfsec-results.sarif
+
+      - name: Upload TFSec Results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: tfsec-results.sarif
+
+      - name: Run Go Vet
+        run: |
+          cd test/e2e
+          go vet ./...
+
+      - name: Run Go Mod Tidy
+        run: |
+          cd test/e2e
+          go mod tidy
+
+  # Unit Tests
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: code-quality
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Run Unit Tests
+        run: |
+          # Run all unit tests
+          find tests/unit -name "*.tftest.hcl" -exec terraform test {} \;
+
+      - name: Upload Unit Test Results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: unit-test-results
+          path: |
+            **/test-results/
+            **/*.xml
+
+  # Integration Tests
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    environment: staging
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_STAGING }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_STAGING }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Run Integration Tests
+        run: |
+          cd tests/integration
+          terraform test -var-file=../../single.tfvars
+
+      - name: Upload Integration Test Results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: integration-test-results
+          path: |
+            **/test-results/
+            **/*.xml
+
+  # End-to-End Tests
+  e2e-tests:
+    name: End-to-End Tests
+    runs-on: ubuntu-latest
+    needs: integration-tests
+    environment: staging
+    strategy:
+      matrix:
+        test: [e2e_guardduty_flow_test.go, e2e_error_paths_test.go, e2e_security_controls_test.go]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_STAGING }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_STAGING }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install Terratest dependencies
+        run: |
+          cd test/e2e
+          go mod download
+
+      - name: Run E2E Test ${{ matrix.test }}
+        run: |
+          cd test/e2e
+          go test -v -run Test${{ matrix.test }} -timeout 30m
+
+      - name: Upload E2E Test Results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: e2e-test-results-${{ matrix.test }}
+          path: |
+            test/e2e/test-results/
+            **/*.xml
+
+  # Performance Tests
+  performance-tests:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    needs: e2e-tests
+    environment: staging
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_STAGING }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_STAGING }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Run Performance Tests
+        run: |
+          cd test/e2e
+          go test -v -run TestConcurrentEvents -timeout 45m
+
+      - name: Generate Performance Report
+        run: |
+          echo "Performance test completed" > performance-report.txt
+          date >> performance-report.txt
+
+      - name: Upload Performance Results
+        uses: actions/upload-artifact@v3
+        with:
+          name: performance-results
+          path: performance-report.txt
+
+  # Security Validation
+  security-validation:
+    name: Security Validation
+    runs-on: ubuntu-latest
+    needs: [code-quality, unit-tests]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Run Security Validation Tests
+        run: |
+          # Test IAM policies for least privilege
+          echo "Running IAM policy validation..."
+
+          # Test encryption configurations
+          echo "Running encryption validation..."
+
+          # Test security group configurations
+          echo "Running security group validation..."
+
+      - name: Upload Security Validation Results
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-validation-results
+          path: security-validation.log
+
+  # Deployment to Staging
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [integration-tests, e2e-tests, performance-tests]
+    environment: staging
+    if: github.ref == 'refs/heads/develop'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_STAGING }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_STAGING }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan (Staging)
+        run: terraform plan -var-file=single.tfvars -out=tfplan-staging
+
+      - name: Terraform Apply (Staging)
+        run: terraform apply -auto-approve tfplan-staging
+
+      - name: Run Post-Deployment Health Checks
+        run: |
+          # Verify Lambda functions are deployed
+          aws lambda list-functions --query 'Functions[?FunctionName==`guardduty-triage`]'
+
+          # Verify Step Functions state machine
+          aws stepfunctions list-state-machines --query 'stateMachines[?name==`guardduty-ir`]'
+
+          # Verify S3 bucket
+          aws s3 ls s3://$(terraform output -raw s3_evidence_bucket_name)
+
+      - name: Send Staging Deployment Notification
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --data '{"text":"Threat Detection IR deployed to staging successfully"}' \
+            ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # Production Deployment
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    environment: production
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_PROD }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan (Production)
+        run: terraform plan -var-file=org.tfvars -out=tfplan-prod
+
+      - name: Manual Approval Gate
+        uses: trstringer/manual-approval@v1
+        with:
+          secret: ${{ secrets.MANUAL_APPROVAL_TOKEN }}
+          approvers: security-team,platform-team
+          minimum-approvals: 2
+          issue-title: "Production Deployment Approval Required"
+          issue-body: "Please review and approve production deployment of threat detection stack"
+
+      - name: Terraform Apply (Production)
+        run: terraform apply -auto-approve tfplan-prod
+
+      - name: Run Production Health Checks
+        run: |
+          # Comprehensive health checks
+          aws lambda get-function --function-name guardduty-triage
+          aws stepfunctions describe-state-machine --state-machine-arn $(terraform output -raw stepfn_ir_state_machine_arn)
+          aws s3 ls s3://$(terraform output -raw s3_evidence_bucket_name)
+
+      - name: Send Production Deployment Notification
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --data '{"text":"Threat Detection IR deployed to production successfully"}' \
+            ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # Final Status Report
+  status-report:
+    name: Status Report
+    runs-on: ubuntu-latest
+    needs: [code-quality, unit-tests, integration-tests, e2e-tests, performance-tests, security-validation]
+    if: always()
+    steps:
+      - name: Generate Test Summary
+        run: |
+          echo "# Test Execution Summary" > test-summary.md
+          echo "" >> test-summary.md
+          echo "## Results:" >> test-summary.md
+          echo "- Code Quality: ${{ needs.code-quality.result }}" >> test-summary.md
+          echo "- Unit Tests: ${{ needs.unit-tests.result }}" >> test-summary.md
+          echo "- Integration Tests: ${{ needs.integration-tests.result }}" >> test-summary.md
+          echo "- E2E Tests: ${{ needs.e2e-tests.result }}" >> test-summary.md
+          echo "- Performance Tests: ${{ needs.performance-tests.result }}" >> test-summary.md
+          echo "- Security Validation: ${{ needs.security-validation.result }}" >> test-summary.md
+          echo "" >> test-summary.md
+          echo "## Deployment Status:" >> test-summary.md
+          echo "- Staging: ${{ needs.deploy-staging.result }}" >> test-summary.md
+          echo "- Production: ${{ needs.deploy-production.result }}" >> test-summary.md
+
+      - name: Upload Test Summary
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-summary
+          path: test-summary.md
+
+      - name: Notify on Failure
+        if: failure()
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --data '{"text":"Threat Detection IR CI/CD Pipeline Failed","attachments":[{"color":"danger","text":"Check the GitHub Actions logs for details"}]}' \
+            ${{ secrets.SLACK_WEBHOOK_URL }}

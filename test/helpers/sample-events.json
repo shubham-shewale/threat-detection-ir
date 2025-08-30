@@ -1,0 +1,372 @@
+{
+  "events": {
+    "high-severity-ssh-brute-force": {
+      "source": "aws.guardduty",
+      "detail-type": "GuardDuty Finding",
+      "detail": {
+        "id": "sample-finding-001",
+        "severity": 8.5,
+        "type": "UnauthorizedAccess:EC2/SSHBruteForce",
+        "title": "Multiple SSH brute force attacks detected",
+        "description": "EC2 instance i-1234567890abcdef0 has been involved in multiple SSH brute force attacks.",
+        "resource": {
+          "resourceType": "Instance",
+          "instanceDetails": {
+            "instanceId": "i-1234567890abcdef0",
+            "instanceType": "t3.micro",
+            "launchTime": "2023-08-30T10:00:00Z",
+            "platform": "Linux/Unix",
+            "networkInterfaces": [
+              {
+                "networkInterfaceId": "eni-12345678",
+                "privateIpAddress": "10.0.1.100",
+                "publicIp": "203.0.113.1"
+              }
+            ]
+          }
+        },
+        "service": {
+          "serviceName": "guardduty",
+          "detectorId": "detector-id",
+          "action": {
+            "actionType": "NETWORK_CONNECTION",
+            "networkConnectionAction": {
+              "connectionDirection": "INBOUND",
+              "protocol": "TCP",
+              "blocked": false,
+              "localPortDetails": {
+                "port": 22,
+                "portName": "SSH"
+              }
+            }
+          }
+        }
+      }
+    },
+    "critical-severity-port-scan": {
+      "source": "aws.guardduty",
+      "detail-type": "GuardDuty Finding",
+      "detail": {
+        "id": "sample-finding-002",
+        "severity": 9.5,
+        "type": "Recon:EC2/Portscan",
+        "title": "EC2 instance involved in port scanning activity",
+        "description": "EC2 instance i-0987654321fedcba0 is performing port scanning.",
+        "resource": {
+          "resourceType": "Instance",
+          "instanceDetails": {
+            "instanceId": "i-0987654321fedcba0",
+            "instanceType": "t3.small",
+            "launchTime": "2023-08-30T11:00:00Z",
+            "platform": "Linux/Unix"
+          }
+        },
+        "service": {
+          "serviceName": "guardduty",
+          "detectorId": "detector-id",
+          "action": {
+            "actionType": "PORT_PROBE",
+            "portProbeAction": {
+              "portProbeDetails": [
+                {
+                  "localPortDetails": {
+                    "port": 80,
+                    "portName": "HTTP"
+                  },
+                  "remoteIpDetails": {
+                    "ipAddressV4": "192.0.2.1",
+                    "organization": {
+                      "org": "ExampleOrg"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "medium-severity-suspicious-login": {
+      "source": "aws.guardduty",
+      "detail-type": "GuardDuty Finding",
+      "detail": {
+        "id": "sample-finding-003",
+        "severity": 6.0,
+        "type": "UnauthorizedAccess:EC2/MaliciousIPCaller",
+        "title": "Suspicious login attempt from malicious IP",
+        "description": "EC2 instance i-abcdef1234567890 received a login attempt from a known malicious IP address.",
+        "resource": {
+          "resourceType": "Instance",
+          "instanceDetails": {
+            "instanceId": "i-abcdef1234567890",
+            "instanceType": "t3.medium",
+            "launchTime": "2023-08-30T12:00:00Z",
+            "platform": "Linux/Unix"
+          }
+        },
+        "service": {
+          "serviceName": "guardduty",
+          "detectorId": "detector-id",
+          "action": {
+            "actionType": "AWS_API_CALL",
+            "awsApiCallAction": {
+              "api": "GetCallerIdentity",
+              "serviceName": "sts.amazonaws.com",
+              "callerType": "Remote IP",
+              "remoteIpDetails": {
+                "ipAddressV4": "198.51.100.1",
+                "organization": {
+                  "org": "MaliciousOrg"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "low-severity-info-finding": {
+      "source": "aws.guardduty",
+      "detail-type": "GuardDuty Finding",
+      "detail": {
+        "id": "sample-finding-004",
+        "severity": 2.0,
+        "type": "Recon:EC2/PortProbeUnprotectedPort",
+        "title": "Port probe on unprotected port",
+        "description": "EC2 instance i-fedcba0987654321 has an unprotected port that was probed.",
+        "resource": {
+          "resourceType": "Instance",
+          "instanceDetails": {
+            "instanceId": "i-fedcba0987654321",
+            "instanceType": "t3.large",
+            "launchTime": "2023-08-30T13:00:00Z",
+            "platform": "Linux/Unix"
+          }
+        },
+        "service": {
+          "serviceName": "guardduty",
+          "detectorId": "detector-id",
+          "action": {
+            "actionType": "PORT_PROBE",
+            "portProbeAction": {
+              "portProbeDetails": [
+                {
+                  "localPortDetails": {
+                    "port": 8080,
+                    "portName": "HTTP-ALT"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "s3-malware-finding": {
+      "source": "aws.guardduty",
+      "detail-type": "GuardDuty Finding",
+      "detail": {
+        "id": "sample-finding-005",
+        "severity": 8.0,
+        "type": "Trojan:EC2/BlackholeTraffic",
+        "title": "EC2 instance generating blackhole traffic",
+        "description": "EC2 instance i-malwaresample123 is generating blackhole traffic, indicating potential malware.",
+        "resource": {
+          "resourceType": "Instance",
+          "instanceDetails": {
+            "instanceId": "i-malwaresample123",
+            "instanceType": "t3.micro",
+            "launchTime": "2023-08-30T14:00:00Z",
+            "platform": "Linux/Unix"
+          }
+        },
+        "service": {
+          "serviceName": "guardduty",
+          "detectorId": "detector-id",
+          "action": {
+            "actionType": "DNS_REQUEST",
+            "dnsRequestAction": {
+              "domain": "malicious-domain.example.com"
+            }
+          }
+        }
+      }
+    },
+    "s3-suspicious-access": {
+      "source": "aws.guardduty",
+      "detail-type": "GuardDuty Finding",
+      "detail": {
+        "id": "sample-finding-006",
+        "severity": 7.5,
+        "type": "Discovery:S3/MaliciousIPCaller",
+        "title": "S3 bucket accessed from suspicious IP",
+        "description": "S3 bucket compromised-bucket was accessed from a suspicious IP address.",
+        "resource": {
+          "resourceType": "S3Bucket",
+          "s3BucketDetails": {
+            "bucketName": "compromised-bucket",
+            "ownerId": "123456789012"
+          }
+        },
+        "service": {
+          "serviceName": "guardduty",
+          "detectorId": "detector-id",
+          "action": {
+            "actionType": "S3_DATA_EVENT",
+            "s3DataEvent": {
+              "bucketName": "compromised-bucket",
+              "objectKey": "sensitive-data.txt"
+            }
+          }
+        }
+      }
+    }
+  },
+  "malformed-events": {
+    "invalid-json": {
+      "source": "aws.guardduty",
+      "detail-type": "GuardDuty Finding",
+      "detail": {
+        "id": "test-malformed",
+        "severity": "invalid-json"
+      }
+    },
+    "missing-required-fields": {
+      "source": "aws.guardduty",
+      "detail-type": "GuardDuty Finding",
+      "detail": {}
+    },
+    "wrong-source": {
+      "source": "aws.ec2",
+      "detail-type": "GuardDuty Finding",
+      "detail": {
+        "id": "test-wrong-source",
+        "severity": 8.0
+      }
+    },
+    "empty-detail": {
+      "source": "aws.guardduty",
+      "detail-type": "GuardDuty Finding",
+      "detail": null
+    },
+    "invalid-severity-type": {
+      "source": "aws.guardduty",
+      "detail-type": "GuardDuty Finding",
+      "detail": {
+        "id": "test-invalid-severity",
+        "severity": "HIGH",
+        "type": "TestFinding"
+      }
+    }
+  },
+  "bulk-test-events": {
+    "concurrent-events": [
+      {
+        "source": "aws.guardduty",
+        "detail-type": "GuardDuty Finding",
+        "detail": {
+          "id": "bulk-test-001",
+          "severity": 8.0,
+          "type": "UnauthorizedAccess:EC2/SSHBruteForce",
+          "resource": {
+            "resourceType": "Instance",
+            "instanceDetails": {
+              "instanceId": "i-bulk001"
+            }
+          }
+        }
+      },
+      {
+        "source": "aws.guardduty",
+        "detail-type": "GuardDuty Finding",
+        "detail": {
+          "id": "bulk-test-002",
+          "severity": 8.0,
+          "type": "UnauthorizedAccess:EC2/SSHBruteForce",
+          "resource": {
+            "resourceType": "Instance",
+            "instanceDetails": {
+              "instanceId": "i-bulk002"
+            }
+          }
+        }
+      },
+      {
+        "source": "aws.guardduty",
+        "detail-type": "GuardDuty Finding",
+        "detail": {
+          "id": "bulk-test-003",
+          "severity": 8.0,
+          "type": "UnauthorizedAccess:EC2/SSHBruteForce",
+          "resource": {
+            "resourceType": "Instance",
+            "instanceDetails": {
+              "instanceId": "i-bulk003"
+            }
+          }
+        }
+      }
+    ]
+  },
+  "severity-thresholds": {
+    "low-threshold": {
+      "source": "aws.guardduty",
+      "detail-type": "GuardDuty Finding",
+      "detail": {
+        "id": "threshold-test-low",
+        "severity": 3.0,
+        "type": "Recon:EC2/PortProbeUnprotectedPort",
+        "resource": {
+          "resourceType": "Instance",
+          "instanceDetails": {
+            "instanceId": "i-threshold-low"
+          }
+        }
+      }
+    },
+    "medium-threshold": {
+      "source": "aws.guardduty",
+      "detail-type": "GuardDuty Finding",
+      "detail": {
+        "id": "threshold-test-medium",
+        "severity": 6.0,
+        "type": "UnauthorizedAccess:EC2/MaliciousIPCaller",
+        "resource": {
+          "resourceType": "Instance",
+          "instanceDetails": {
+            "instanceId": "i-threshold-medium"
+          }
+        }
+      }
+    },
+    "high-threshold": {
+      "source": "aws.guardduty",
+      "detail-type": "GuardDuty Finding",
+      "detail": {
+        "id": "threshold-test-high",
+        "severity": 8.0,
+        "type": "UnauthorizedAccess:EC2/SSHBruteForce",
+        "resource": {
+          "resourceType": "Instance",
+          "instanceDetails": {
+            "instanceId": "i-threshold-high"
+          }
+        }
+      }
+    },
+    "critical-threshold": {
+      "source": "aws.guardduty",
+      "detail-type": "GuardDuty Finding",
+      "detail": {
+        "id": "threshold-test-critical",
+        "severity": 9.5,
+        "type": "Recon:EC2/Portscan",
+        "resource": {
+          "resourceType": "Instance",
+          "instanceDetails": {
+            "instanceId": "i-threshold-critical"
+          }
+        }
+      }
+    }
+  }
+}
